@@ -24,6 +24,31 @@
     }
     h1 { font-size: 1.4rem; text-align: center; margin-top: 0; }
     input[type="file"] { width: 100%; margin: 10px 0; }
+    .setting-group {
+      margin: 15px 0;
+      padding: 12px;
+      background: #f8f9fa;
+      border-radius: 8px;
+    }
+    .setting-group label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+    .range-inputs {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    input[type="number"] {
+      width: 80px;
+      padding: 8px;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      text-align: center;
+    }
     .word-display {
       font-size: 2rem;
       font-weight: bold;
@@ -60,131 +85,11 @@
 </head>
 <body>
 
+  <!-- 1. ファイル選択画面 -->
   <div class="card" id="setup-area">
     <h1>英単語小テスト</h1>
     <p style="font-size: 0.9rem;">スマホ内のExcelファイル（.xlsx / .xls）を選択してください。（A列：英単語、B列：意味）</p>
     <input type="file" id="excel-file" accept=".xlsx, .xls, .csv">
   </div>
 
-  <div class="card hidden" id="quiz-area">
-    <div class="status" id="progress-text">問題 1 / 10</div>
-    <div class="word-display" id="question-word">apple</div>
-    <div id="choices-container"></div>
-    <button class="btn hidden" id="next-btn" onclick="nextQuestion()">次の問題へ</button>
-  </div>
-
-  <div class="card hidden" id="result-area">
-    <h1>テスト終了！</h1>
-    <p class="word-display" id="score-text">8 / 10 問正解</p>
-    <button class="btn" onclick="restartQuiz()">もう一度挑戦する</button>
-    <button class="btn" style="background-color: #95a5a6;" onclick="location.reload()">別のファイルを選ぶ</button>
-  </div>
-
-<script>
-  let wordList = [];
-  let currentIndex = 0;
-  let score = 0;
-  let quizWords = [];
-
-  // ファイル選択時の処理
-  document.getElementById('excel-file').addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      // 2次元配列としてデータを取得
-      const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-
-      // 1行目(ヘッダー)を除き、空行をフィルタリング
-      wordList = rows.slice(1)
-        .filter(row => row[0] && row[1])
-        .map(row => ({ en: String(row[0]).trim(), ja: String(row[1]).trim() }));
-
-      if (wordList.length < 4) {
-        alert("4択問題を作るため、最低4単語以上登録されたExcelファイルを選んでください。");
-        return;
-      }
-      startQuiz();
-    };
-    reader.readAsArrayBuffer(file);
-  });
-
-  function startQuiz() {
-    // 単語リストをシャッフル
-    quizWords = [...wordList].sort(() => Math.random() - 0.5);
-    currentIndex = 0;
-    score = 0;
-    document.getElementById('setup-area').classList.add('hidden');
-    document.getElementById('result-area').classList.add('hidden');
-    document.getElementById('quiz-area').classList.remove('hidden');
-    showQuestion();
-  }
-
-  function showQuestion() {
-    const currentWord = quizWords[currentIndex];
-    document.getElementById('progress-text').textContent = `問題 ${currentIndex + 1} / ${quizWords.length}`;
-    document.getElementById('question-word').textContent = currentWord.en;
-    document.getElementById('next-btn').classList.add('hidden');
-
-    // 選択肢の作成（正解1つ + 他の単語からランダム3つ）
-    let choices = [currentWord.ja];
-    let otherWords = wordList.filter(w => w.en !== currentWord.en);
-    otherWords.sort(() => Math.random() - 0.5);
-    for (let i = 0; i < 3; i++) {
-      choices.push(otherWords[i].ja);
-    }
-    choices.sort(() => Math.random() - 0.5);
-
-    const container = document.getElementById('choices-container');
-    container.innerHTML = '';
-    choices.forEach(choice => {
-      const btn = document.createElement('button');
-      btn.className = 'btn choice-btn';
-      btn.textContent = choice;
-      btn.onclick = () => checkAnswer(btn, choice, currentWord.ja);
-      container.appendChild(btn);
-    });
-  }
-
-  function checkAnswer(selectedBtn, selectedText, correctText) {
-    const buttons = document.querySelectorAll('.choice-btn');
-    buttons.forEach(btn => {
-      btn.disabled = true;
-      if (btn.textContent === correctText) {
-        btn.classList.add('correct');
-      }
-    });
-
-    if (selectedText === correctText) {
-      score++;
-    } else {
-      selectedBtn.classList.add('wrong');
-    }
-    document.getElementById('next-btn').classList.remove('hidden');
-  }
-
-  function nextQuestion() {
-    currentIndex++;
-    if (currentIndex < quizWords.length) {
-      showQuestion();
-    } else {
-      showResult();
-    }
-  }
-
-  function showResult() {
-    document.getElementById('quiz-area').classList.add('hidden');
-    document.getElementById('result-area').classList.remove('hidden');
-    document.getElementById('score-text').textContent = `${score} / ${quizWords.length} 問正解`;
-  }
-
-  function restartQuiz() {
-    startQuiz();
-  }
-</script>
-</body>
-</html>
+  <!-- 2. 出題範囲
