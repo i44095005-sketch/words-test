@@ -79,7 +79,17 @@
     }
     .choice-btn.correct { background-color: #2ecc71; color: white; }
     .choice-btn.wrong { background-color: #e74c3c; color: white; }
-    .status { text-align: center; font-size: 0.9rem; color: #7f8c8d; }
+    .status { text-align: center; font-size: 0.9rem; color: #7f8c8d; margin: 4px 0; }
+    .file-badge {
+      display: inline-block;
+      background: #e8f4fd;
+      color: #2980b9;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
     .hidden { display: none; }
   </style>
 </head>
@@ -89,13 +99,17 @@
   <div class="card" id="setup-area">
     <h1>英単語小テスト</h1>
     <p style="font-size: 0.9rem;">スマホ内のExcelファイル（.xlsx / .xls）を選択してください。（A列：英単語、B列：意味）</p>
+    <p style="font-size: 0.8rem; color: #7f8c8d;">※一度読み込むとスマホのブラウザに自動保存されます。</p>
     <input type="file" id="excel-file" accept=".xlsx, .xls, .csv">
   </div>
 
   <!-- 2. 出題範囲・出題数の設定画面 -->
   <div class="card hidden" id="config-area">
     <h1>出題設定</h1>
-    <p class="status" id="total-words-info">全 0 単語を読み込みました</p>
+    <div style="text-align: center;">
+      <span class="file-badge" id="saved-filename">保存済みデータ</span>
+      <p class="status" id="total-words-info">全 0 単語</p>
+    </div>
 
     <div class="setting-group">
       <label>出題範囲（単語番号）</label>
@@ -113,7 +127,7 @@
     </div>
 
     <button class="btn" onclick="startQuiz()">テスト開始</button>
-    <button class="btn" style="background-color: #95a5a6;" onclick="location.reload()">別のファイルを選ぶ</button>
+    <button class="btn" style="background-color: #95a5a6;" onclick="resetData()">別のファイルを選ぶ（データ更新）</button>
   </div>
 
   <!-- 3. クイズ画面 -->
@@ -130,14 +144,36 @@
     <p class="word-display" id="score-text">8 / 10 問正解</p>
     <button class="btn" onclick="startQuiz()">同じ設定でもう一度</button>
     <button class="btn" style="background-color: #2ecc71;" onclick="backToConfig()">範囲・出題数を変更する</button>
-    <button class="btn" style="background-color: #95a5a6;" onclick="location.reload()">別のファイルを選ぶ</button>
+    <button class="btn" style="background-color: #95a5a6;" onclick="resetData()">別のファイルを選ぶ</button>
   </div>
 
 <script>
+  const STORAGE_KEY_WORDS = 'vocab_quiz_words_v1';
+  const STORAGE_KEY_META = 'vocab_quiz_meta_v1';
+
   let wordList = [];
   let currentIndex = 0;
   let score = 0;
   let quizWords = [];
+
+  // ページ読み込み時に保存済みデータを確認
+  window.addEventListener('DOMContentLoaded', () => {
+    const savedWords = localStorage.getItem(STORAGE_KEY_WORDS);
+    const savedMeta = localStorage.getItem(STORAGE_KEY_META);
+
+    if (savedWords) {
+      try {
+        wordList = JSON.parse(savedWords);
+        const meta = savedMeta ? JSON.parse(savedMeta) : {};
+        if (wordList.length >= 4) {
+          setupConfigScreen(meta.fileName || '保存済みファイル', meta.startNum, meta.endNum, meta.count);
+          return;
+        }
+      } catch (e) {
+        console.error('保存データの読み込みに失敗しました', e);
+      }
+    }
+  });
 
   // ファイル選択時の処理
   document.getElementById('excel-file').addEventListener('change', function(e) {
@@ -152,51 +188,90 @@
       const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
 
       // 1行目(ヘッダー)を除き、空行をフィルタリング
-      wordList = rows.slice(1)
+      const parsedList = rows.slice(1)
         .filter(row => row[0] && row[1])
         .map(row => ({ en: String(row[0]).trim(), ja: String(row[1]).trim() }));
 
-      if (wordList.length < 4) {
+      if (parsedList.length < 4) {
         alert("4択問題を作るため、最低4単語以上登録されたExcelファイルを選んでください。");
         return;
       }
 
-      // 設定画面の初期値をセット
-      document.getElementById('total-words-info').textContent = `全 ${wordList.length} 単語を読み込みました`;
-      document.getElementById('start-num').max = wordList.length;
-      document.getElementById('end-num').max = wordList.length;
-      document.getElementById('end-num').value = wordList.length;
-      document.getElementById('question-count').value = Math.min(10, wordList.length);
+      wordList = parsedList;
 
-      document.getElementById('setup-area').classList.add('hidden');
-      document.getElementById('config-area').classList.remove('hidden');
+      // localStorageに単語データとファイル名を保存
+      try {
+        localStorage.setItem(STORAGE_KEY_WORDS, JSON.stringify(wordList));
+        localStorage.setItem(STORAGE_KEY_META, JSON.stringify({
+          fileName: file.name,
+          startNum: 1,
+          endNum: wordList.length,
+          count: Math.min(10, wordList.length)
+        }));
+      } catch (err) {
+        alert("単語数が多すぎるためブラウザへの保存に失敗しました（今回のテストはそのまま実行できます）。");
+      }
+
+      setupConfigScreen(file.name);
     };
     reader.readAsArrayBuffer(file);
   });
+
+  // 設定画面のセットアップ
+  function setupConfigScreen(fileName, savedStart, savedEnd, savedCount) {
+    document.getElementById('saved-filename').textContent = `📄 ${fileName}`;
+    document.getElementById('total-words-info').textContent = `全 ${wordList.length} 単語（保存済み）`;
+
+    const startInput = document.getElementById('start-num');
+    const endInput = document.getElementById('end-num');
+    const countInput = document.getElementById('question-count');
+
+    startInput.max = wordList.length;
+    endInput.max = wordList.length;
+
+    startInput.value = savedStart || 1;
+    endInput.value = savedEnd && savedEnd <= wordList.length ? savedEnd : wordList.length;
+    countInput.value = savedCount || Math.min(10, wordList.length);
+
+    document.getElementById('setup-area').classList.add('hidden');
+    document.getElementById('config-area').classList.remove('hidden');
+  }
+
+  // 保存データをクリアしてファイル選択画面に戻る
+  function resetData() {
+    document.getElementById('excel-file').value = '';
+    document.getElementById('config-area').classList.add('hidden');
+    document.getElementById('result-area').classList.add('hidden');
+    document.getElementById('setup-area').classList.remove('hidden');
+  }
 
   function startQuiz() {
     const startNum = parseInt(document.getElementById('start-num').value, 10);
     const endNum = parseInt(document.getElementById('end-num').value, 10);
     const count = parseInt(document.getElementById('question-count').value, 10);
 
-    // 入力値のバリデーション
     if (isNaN(startNum) || isNaN(endNum) || startNum < 1 || endNum > wordList.length || startNum > endNum) {
       alert(`出題範囲は 1 〜 ${wordList.length} の間で正しく指定してください。`);
       return;
     }
-
-    // 指定範囲の単語を抽出（配列は0始まりなので startNum - 1）
-    const targetWords = wordList.slice(startNum - 1, endNum);
 
     if (isNaN(count) || count < 1) {
       alert("出題数は1以上を指定してください。");
       return;
     }
 
-    // 範囲内の単語数より多い出題数が指定された場合は、範囲内の全単語数に合わせる
+    // 前回の出題設定もlocalStorageに保存しておく
+    try {
+      const currentMeta = JSON.parse(localStorage.getItem(STORAGE_KEY_META) || '{}');
+      currentMeta.startNum = startNum;
+      currentMeta.endNum = endNum;
+      currentMeta.count = count;
+      localStorage.setItem(STORAGE_KEY_META, JSON.stringify(currentMeta));
+    } catch (e) {}
+
+    const targetWords = wordList.slice(startNum - 1, endNum);
     const actualCount = Math.min(count, targetWords.length);
 
-    // 範囲内の単語をシャッフルして指定数だけ切り出す
     quizWords = [...targetWords]
       .sort(() => Math.random() - 0.5)
       .slice(0, actualCount);
@@ -215,7 +290,6 @@
     document.getElementById('question-word').textContent = currentWord.en;
     document.getElementById('next-btn').classList.add('hidden');
 
-    // 選択肢の作成（正解1つ + 全体の単語リストからランダム3つ）
     let choices = [currentWord.ja];
     let otherWords = wordList.filter(w => w.en !== currentWord.en);
     otherWords.sort(() => Math.random() - 0.5);
