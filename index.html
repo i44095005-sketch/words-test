@@ -3,29 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>英単語小テスト</title>
+  <title>短文穴埋め 4択問題集</title>
   <!-- Excel読み込み用ライブラリ (SheetJS) -->
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      max-width: 500px;
+      max-width: 600px;
       margin: 0 auto;
-      padding: 20px;
+      padding: 16px;
       background-color: #f4f7f6;
       color: #333;
+      line-height: 1.6;
     }
     .card {
       background: #fff;
       padding: 20px;
       border-radius: 12px;
       box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-      margin-bottom: 20px;
+      margin-bottom: 16px;
     }
-    h1 { font-size: 1.4rem; text-align: center; margin-top: 0; }
+    h1 { font-size: 1.35rem; text-align: center; margin-top: 0; }
     input[type="file"] { width: 100%; margin: 10px 0; }
     .setting-group {
-      margin: 15px 0;
+      margin: 14px 0;
       padding: 12px;
       background: #f8f9fa;
       border-radius: 8px;
@@ -34,32 +35,55 @@
       display: block;
       font-size: 0.9rem;
       font-weight: bold;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
     .range-inputs {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
+      flex-wrap: wrap;
     }
-    input[type="number"] {
-      width: 80px;
-      padding: 8px;
+    input[type="number"], select {
+      padding: 8px 10px;
       font-size: 1rem;
       border: 1px solid #ccc;
       border-radius: 6px;
-      text-align: center;
+      background: #fff;
     }
-    .word-display {
-      font-size: 2rem;
+    input[type="number"] { width: 85px; text-align: center; }
+    select { width: 100%; }
+    .meta-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      color: #666;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 8px;
+    }
+    .category-tag {
+      background: #e8f4fd;
+      color: #2980b9;
+      padding: 2px 10px;
+      border-radius: 12px;
       font-weight: bold;
-      text-align: center;
-      margin: 30px 0;
+      font-size: 0.8rem;
+    }
+    .question-box {
+      font-size: 1.15rem;
+      font-weight: 600;
       color: #2c3e50;
+      margin: 16px 0 20px;
+      padding: 14px;
+      background: #fcfdfd;
+      border-left: 4px solid #3498db;
+      border-radius: 4px;
     }
     .btn {
       display: block;
       width: 100%;
-      padding: 14px;
+      padding: 13px 16px;
       margin: 10px 0;
       font-size: 1rem;
       font-weight: bold;
@@ -68,27 +92,65 @@
       cursor: pointer;
       background-color: #3498db;
       color: white;
-      transition: background 0.2s;
+      transition: background 0.15s;
     }
     .btn:active { background-color: #2980b9; }
     .choice-btn {
-      background-color: #ecf0f1;
+      background-color: #f1f3f5;
       color: #2c3e50;
       text-align: left;
       font-weight: normal;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    .choice-label {
+      font-weight: bold;
+      min-width: 24px;
+      color: #3498db;
     }
     .choice-btn.correct { background-color: #2ecc71; color: white; }
+    .choice-btn.correct .choice-label { color: white; }
     .choice-btn.wrong { background-color: #e74c3c; color: white; }
+    .choice-btn.wrong .choice-label { color: white; }
+
+    /* 解説・日本語訳エリア */
+    .explanation-box {
+      margin-top: 20px;
+      padding: 16px;
+      background: #fff9e6;
+      border: 1px solid #ffeaa7;
+      border-radius: 8px;
+      font-size: 0.95rem;
+    }
+    .explanation-box h3 {
+      margin: 0 0 6px;
+      font-size: 0.9rem;
+      color: #d35400;
+    }
+    .translation-text {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px dashed #e0d3a6;
+      color: #444;
+    }
     .status { text-align: center; font-size: 0.9rem; color: #7f8c8d; margin: 4px 0; }
     .file-badge {
       display: inline-block;
       background: #e8f4fd;
       color: #2980b9;
-      padding: 4px 10px;
+      padding: 4px 12px;
       border-radius: 20px;
       font-size: 0.85rem;
       font-weight: bold;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
+    }
+    .score-display {
+      font-size: 2rem;
+      font-weight: bold;
+      text-align: center;
+      margin: 24px 0;
+      color: #2c3e50;
     }
     .hidden { display: none; }
   </style>
@@ -97,32 +159,48 @@
 
   <!-- 1. ファイル選択画面 -->
   <div class="card" id="setup-area">
-    <h1>英単語小テスト</h1>
-    <p style="font-size: 0.9rem;">スマホ内のExcelファイル（.xlsx / .xls）を選択してください。（A列：英単語、B列：意味）</p>
-    <p style="font-size: 0.8rem; color: #7f8c8d;">※一度読み込むとスマホのブラウザに自動保存されます。</p>
+    <h1>短文穴埋め 4択問題集</h1>
+    <p style="font-size: 0.9rem;">スマホ内のExcelファイル（.xlsx / .xls）を選択してください。</p>
+    <p style="font-size: 0.8rem; color: #666; background: #f8f9fa; padding: 10px; border-radius: 6px;">
+      <strong>列構成（1行目は見出し）：</strong><br>
+      A:番号 / B:分野 / C:問題文 / D〜G:選択肢A〜D / H:解答(A〜D) / I:解説 / J:日本語訳
+    </p>
     <input type="file" id="excel-file" accept=".xlsx, .xls, .csv">
   </div>
 
-  <!-- 2. 出題範囲・出題数の設定画面 -->
+  <!-- 2. 出題設定画面 -->
   <div class="card hidden" id="config-area">
     <h1>出題設定</h1>
     <div style="text-align: center;">
       <span class="file-badge" id="saved-filename">保存済みデータ</span>
-      <p class="status" id="total-words-info">全 0 単語</p>
+      <p class="status" id="total-words-info">全 0 問</p>
     </div>
 
     <div class="setting-group">
-      <label>出題範囲（単語番号）</label>
+      <label>分野で絞り込む</label>
+      <select id="category-select" onchange="updateAvailableCount()">
+        <option value="ALL">すべての分野</option>
+      </select>
+    </div>
+
+    <div class="setting-group">
+      <label>出題範囲（A列の番号 / 行順）</label>
       <div class="range-inputs">
-        <input type="number" id="start-num" min="1" value="1"> 番目 〜
-        <input type="number" id="end-num" min="1" value="10"> 番目
+        <input type="number" id="start-num" min="1" value="1" onchange="updateAvailableCount()"> 〜
+        <input type="number" id="end-num" min="1" value="10" onchange="updateAvailableCount()">
+      </div>
+      <div style="font-size: 0.8rem; color: #7f8c8d; margin-top: 6px;" id="matched-count-info">
+        条件に一致する問題: 0 問
       </div>
     </div>
 
     <div class="setting-group">
-      <label>出題数（ランダム出題）</label>
+      <label>出題数</label>
       <div class="range-inputs">
         <input type="number" id="question-count" min="1" value="10"> 問
+        <label style="font-weight: normal; margin: 0 0 0 10px; display: flex; align-items: center; gap: 4px;">
+          <input type="checkbox" id="shuffle-check" checked> ランダム順
+        </label>
       </div>
     </div>
 
@@ -132,42 +210,55 @@
 
   <!-- 3. クイズ画面 -->
   <div class="card hidden" id="quiz-area">
-    <div class="status" id="progress-text">問題 1 / 10</div>
-    <div class="word-display" id="question-word">apple</div>
+    <div class="meta-bar">
+      <span id="progress-text">問題 1 / 10 (No.1)</span>
+      <span class="category-tag" id="question-category">品詞</span>
+    </div>
+
+    <div class="question-box" id="question-sentence">Question text here...</div>
+
     <div id="choices-container"></div>
+
+    <!-- 解答後に表示される解説・日本語訳 -->
+    <div class="explanation-box hidden" id="explanation-area">
+      <h3 id="result-banner">⭕ 正解！</h3>
+      <div id="explanation-text"></div>
+      <div class="translation-text" id="translation-text"></div>
+    </div>
+
     <button class="btn hidden" id="next-btn" onclick="nextQuestion()">次の問題へ</button>
   </div>
 
   <!-- 4. 結果画面 -->
   <div class="card hidden" id="result-area">
     <h1>テスト終了！</h1>
-    <p class="word-display" id="score-text">8 / 10 問正解</p>
+    <p class="score-display" id="score-text">8 / 10 問正解</p>
     <button class="btn" onclick="startQuiz()">同じ設定でもう一度</button>
-    <button class="btn" style="background-color: #2ecc71;" onclick="backToConfig()">範囲・出題数を変更する</button>
+    <button class="btn" style="background-color: #2ecc71;" onclick="backToConfig()">分野・範囲を変更する</button>
     <button class="btn" style="background-color: #95a5a6;" onclick="resetData()">別のファイルを選ぶ</button>
   </div>
 
 <script>
-  const STORAGE_KEY_WORDS = 'vocab_quiz_words_v1';
-  const STORAGE_KEY_META = 'vocab_quiz_meta_v1';
+  // 以前のデータと衝突しないようキー名をバージョンアップ
+  const STORAGE_KEY_QUESTIONS = 'fill_blank_quiz_data_v1';
+  const STORAGE_KEY_META = 'fill_blank_quiz_meta_v1';
 
-  let wordList = [];
+  let questionList = [];
   let currentIndex = 0;
   let score = 0;
-  let quizWords = [];
+  let quizQuestions = [];
 
-  // ページ読み込み時に保存済みデータを確認
+  // 起動時にlocalStorageから復元
   window.addEventListener('DOMContentLoaded', () => {
-    const savedWords = localStorage.getItem(STORAGE_KEY_WORDS);
+    const savedData = localStorage.getItem(STORAGE_KEY_QUESTIONS);
     const savedMeta = localStorage.getItem(STORAGE_KEY_META);
 
-    if (savedWords) {
+    if (savedData) {
       try {
-        wordList = JSON.parse(savedWords);
+        questionList = JSON.parse(savedData);
         const meta = savedMeta ? JSON.parse(savedMeta) : {};
-        if (wordList.length >= 4) {
-          setupConfigScreen(meta.fileName || '保存済みファイル', meta.startNum, meta.endNum, meta.count);
-          return;
+        if (questionList.length >= 1) {
+          setupConfigScreen(meta.fileName || '保存済みファイル', meta);
         }
       } catch (e) {
         console.error('保存データの読み込みに失敗しました', e);
@@ -175,7 +266,7 @@
     }
   });
 
-  // ファイル選択時の処理
+  // Excelファイル読み込み
   document.getElementById('excel-file').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -187,57 +278,115 @@
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
 
-      // 1行目(ヘッダー)を除き、空行をフィルタリング
-      const parsedList = rows.slice(1)
-        .filter(row => row[0] && row[1])
-        .map(row => ({ en: String(row[0]).trim(), ja: String(row[1]).trim() }));
+      // 1行目(ヘッダー)を除き、問題文(C列)と選択肢(D〜G列)と解答(H列)がある行を抽出
+      const parsed = [];
+      rows.slice(1).forEach((row, idx) => {
+        if (!row[2] || !row[7]) return; // C列(問題文)とH列(解答)必須
 
-      if (parsedList.length < 4) {
-        alert("4択問題を作るため、最低4単語以上登録されたExcelファイルを選んでください。");
+        const rawAns = String(row[7]).trim().toUpperCase();
+        if (!['A', 'B', 'C', 'D'].includes(rawAns)) return;
+
+        // A列が数値ならその番号、なければ1からの連番
+        const numVal = parseInt(row[0], 10);
+        const qNum = !isNaN(numVal) ? numVal : (parsed.length + 1);
+
+        parsed.push({
+          num: qNum,
+          category: row[1] ? String(row[1]).trim() : '未分類',
+          question: String(row[2]).trim(),
+          choices: {
+            A: row[3] !== undefined ? String(row[3]).trim() : '',
+            B: row[4] !== undefined ? String(row[4]).trim() : '',
+            C: row[5] !== undefined ? String(row[5]).trim() : '',
+            D: row[6] !== undefined ? String(row[6]).trim() : ''
+          },
+          answer: rawAns,
+          explanation: row[8] ? String(row[8]).trim() : '（解説なし）',
+          translation: row[9] ? String(row[9]).trim() : '（日本語訳なし）'
+        });
+      });
+
+      if (parsed.length === 0) {
+        alert("有効な問題データが見つかりませんでした。C列(問題文)、D〜G列(選択肢)、H列(A〜Dの解答)が正しく入力されているか確認してください。");
         return;
       }
 
-      wordList = parsedList;
+      questionList = parsed;
 
-      // localStorageに単語データとファイル名を保存
+      const minNum = Math.min(...questionList.map(q => q.num));
+      const maxNum = Math.max(...questionList.map(q => q.num));
+      const defaultMeta = {
+        fileName: file.name,
+        category: 'ALL',
+        startNum: minNum,
+        endNum: maxNum,
+        count: Math.min(10, questionList.length),
+        shuffle: true
+      };
+
       try {
-        localStorage.setItem(STORAGE_KEY_WORDS, JSON.stringify(wordList));
-        localStorage.setItem(STORAGE_KEY_META, JSON.stringify({
-          fileName: file.name,
-          startNum: 1,
-          endNum: wordList.length,
-          count: Math.min(10, wordList.length)
-        }));
+        localStorage.setItem(STORAGE_KEY_QUESTIONS, JSON.stringify(questionList));
+        localStorage.setItem(STORAGE_KEY_META, JSON.stringify(defaultMeta));
       } catch (err) {
-        alert("単語数が多すぎるためブラウザへの保存に失敗しました（今回のテストはそのまま実行できます）。");
+        alert("データ量が大きいためブラウザへの保存に失敗しました（今回のテストはそのまま実行できます）。");
       }
 
-      setupConfigScreen(file.name);
+      setupConfigScreen(file.name, defaultMeta);
     };
     reader.readAsArrayBuffer(file);
   });
 
-  // 設定画面のセットアップ
-  function setupConfigScreen(fileName, savedStart, savedEnd, savedCount) {
+  // 設定画面の初期化
+  function setupConfigScreen(fileName, meta = {}) {
     document.getElementById('saved-filename').textContent = `📄 ${fileName}`;
-    document.getElementById('total-words-info').textContent = `全 ${wordList.length} 単語（保存済み）`;
+    document.getElementById('total-words-info').textContent = `全 ${questionList.length} 問（保存済み）`;
 
-    const startInput = document.getElementById('start-num');
-    const endInput = document.getElementById('end-num');
-    const countInput = document.getElementById('question-count');
+    // 分野プルダウンを動的生成
+    const categories = [...new Set(questionList.map(q => q.category))];
+    const catSelect = document.getElementById('category-select');
+    catSelect.innerHTML = '<option value="ALL">すべての分野</option>';
+    categories.forEach(cat => {
+      const opt = document.createElement('option');
+      opt.value = cat;
+      opt.textContent = cat;
+      catSelect.appendChild(opt);
+    });
+    if (meta.category && (meta.category === 'ALL' || categories.includes(meta.category))) {
+      catSelect.value = meta.category;
+    }
 
-    startInput.max = wordList.length;
-    endInput.max = wordList.length;
+    const minNum = Math.min(...questionList.map(q => q.num));
+    const maxNum = Math.max(...questionList.map(q => q.num));
 
-    startInput.value = savedStart || 1;
-    endInput.value = savedEnd && savedEnd <= wordList.length ? savedEnd : wordList.length;
-    countInput.value = savedCount || Math.min(10, wordList.length);
+    document.getElementById('start-num').value = meta.startNum || minNum;
+    document.getElementById('end-num').value = meta.endNum || maxNum;
+    document.getElementById('question-count').value = meta.count || Math.min(10, questionList.length);
+    document.getElementById('shuffle-check').checked = meta.shuffle !== undefined ? meta.shuffle : true;
+
+    updateAvailableCount();
 
     document.getElementById('setup-area').classList.add('hidden');
     document.getElementById('config-area').classList.remove('hidden');
   }
 
-  // 保存データをクリアしてファイル選択画面に戻る
+  // 条件に一致する問題数をリアルタイム表示
+  function getFilteredQuestions() {
+    const selectedCat = document.getElementById('category-select').value;
+    const startNum = parseInt(document.getElementById('start-num').value, 10) || 0;
+    const endNum = parseInt(document.getElementById('end-num').value, 10) || 999999;
+
+    return questionList.filter(q => {
+      const matchCat = (selectedCat === 'ALL' || q.category === selectedCat);
+      const matchNum = (q.num >= startNum && q.num <= endNum);
+      return matchCat && matchNum;
+    });
+  }
+
+  function updateAvailableCount() {
+    const filtered = getFilteredQuestions();
+    document.getElementById('matched-count-info').textContent = `条件に一致する問題: ${filtered.length} 問`;
+  }
+
   function resetData() {
     document.getElementById('excel-file').value = '';
     document.getElementById('config-area').classList.add('hidden');
@@ -246,35 +395,36 @@
   }
 
   function startQuiz() {
-    const startNum = parseInt(document.getElementById('start-num').value, 10);
-    const endNum = parseInt(document.getElementById('end-num').value, 10);
-    const count = parseInt(document.getElementById('question-count').value, 10);
-
-    if (isNaN(startNum) || isNaN(endNum) || startNum < 1 || endNum > wordList.length || startNum > endNum) {
-      alert(`出題範囲は 1 〜 ${wordList.length} の間で正しく指定してください。`);
+    const filtered = getFilteredQuestions();
+    if (filtered.length === 0) {
+      alert("指定された分野・番号範囲に該当する問題がありません。");
       return;
     }
 
+    const count = parseInt(document.getElementById('question-count').value, 10);
     if (isNaN(count) || count < 1) {
       alert("出題数は1以上を指定してください。");
       return;
     }
 
-    // 前回の出題設定もlocalStorageに保存しておく
+    const isShuffle = document.getElementById('shuffle-check').checked;
+
+    // 設定をlocalStorageに保存
     try {
       const currentMeta = JSON.parse(localStorage.getItem(STORAGE_KEY_META) || '{}');
-      currentMeta.startNum = startNum;
-      currentMeta.endNum = endNum;
+      currentMeta.category = document.getElementById('category-select').value;
+      currentMeta.startNum = parseInt(document.getElementById('start-num').value, 10);
+      currentMeta.endNum = parseInt(document.getElementById('end-num').value, 10);
       currentMeta.count = count;
+      currentMeta.shuffle = isShuffle;
       localStorage.setItem(STORAGE_KEY_META, JSON.stringify(currentMeta));
     } catch (e) {}
 
-    const targetWords = wordList.slice(startNum - 1, endNum);
-    const actualCount = Math.min(count, targetWords.length);
-
-    quizWords = [...targetWords]
-      .sort(() => Math.random() - 0.5)
-      .slice(0, actualCount);
+    let pool = [...filtered];
+    if (isShuffle) {
+      pool.sort(() => Math.random() - 0.5);
+    }
+    quizQuestions = pool.slice(0, Math.min(count, pool.length));
 
     currentIndex = 0;
     score = 0;
@@ -285,50 +435,63 @@
   }
 
   function showQuestion() {
-    const currentWord = quizWords[currentIndex];
-    document.getElementById('progress-text').textContent = `問題 ${currentIndex + 1} / ${quizWords.length}`;
-    document.getElementById('question-word').textContent = currentWord.en;
-    document.getElementById('next-btn').classList.add('hidden');
+    const q = quizQuestions[currentIndex];
+    document.getElementById('progress-text').textContent = `問題 ${currentIndex + 1} / ${quizQuestions.length}（No.${q.num}）`;
+    document.getElementById('question-category').textContent = q.category;
+    document.getElementById('question-sentence').textContent = q.question;
 
-    let choices = [currentWord.ja];
-    let otherWords = wordList.filter(w => w.en !== currentWord.en);
-    otherWords.sort(() => Math.random() - 0.5);
-    for (let i = 0; i < 3; i++) {
-      choices.push(otherWords[i].ja);
-    }
-    choices.sort(() => Math.random() - 0.5);
+    // 解説エリアと次へボタンを隠す
+    document.getElementById('explanation-area').classList.add('hidden');
+    document.getElementById('next-btn').classList.add('hidden');
 
     const container = document.getElementById('choices-container');
     container.innerHTML = '';
-    choices.forEach(choice => {
+
+    ['A', 'B', 'C', 'D'].forEach(key => {
+      const choiceText = q.choices[key];
+      if (!choiceText) return; // 空の選択肢はスキップ
+
       const btn = document.createElement('button');
       btn.className = 'btn choice-btn';
-      btn.textContent = choice;
-      btn.onclick = () => checkAnswer(btn, choice, currentWord.ja);
+      btn.dataset.choiceKey = key;
+      btn.innerHTML = `<span class="choice-label">(${key})</span><span>${escapeHtml(choiceText)}</span>`;
+      btn.onclick = () => checkAnswer(btn, key, q);
       container.appendChild(btn);
     });
   }
 
-  function checkAnswer(selectedBtn, selectedText, correctText) {
+  function checkAnswer(selectedBtn, selectedKey, questionObj) {
+    const correctKey = questionObj.answer;
     const buttons = document.querySelectorAll('.choice-btn');
+
     buttons.forEach(btn => {
       btn.disabled = true;
-      if (btn.textContent === correctText) {
+      if (btn.dataset.choiceKey === correctKey) {
         btn.classList.add('correct');
       }
     });
 
-    if (selectedText === correctText) {
+    const banner = document.getElementById('result-banner');
+    if (selectedKey === correctKey) {
       score++;
+      banner.textContent = `⭕ 正解！（正解: ${correctKey}）`;
+      banner.style.color = '#27ae60';
     } else {
       selectedBtn.classList.add('wrong');
+      banner.textContent = `❌ 不正解…（正解: ${correctKey}）`;
+      banner.style.color = '#c0392b';
     }
+
+    // 解説と日本語訳を表示
+    document.getElementById('explanation-text').innerHTML = `<strong>【解説】</strong><br>${escapeHtml(questionObj.explanation).replace(/\n/g, '<br>')}`;
+    document.getElementById('translation-text').innerHTML = `<strong>【日本語訳】</strong><br>${escapeHtml(questionObj.translation).replace(/\n/g, '<br>')}`;
+    document.getElementById('explanation-area').classList.remove('hidden');
     document.getElementById('next-btn').classList.remove('hidden');
   }
 
   function nextQuestion() {
     currentIndex++;
-    if (currentIndex < quizWords.length) {
+    if (currentIndex < quizQuestions.length) {
       showQuestion();
     } else {
       showResult();
@@ -338,12 +501,18 @@
   function showResult() {
     document.getElementById('quiz-area').classList.add('hidden');
     document.getElementById('result-area').classList.remove('hidden');
-    document.getElementById('score-text').textContent = `${score} / ${quizWords.length} 問正解`;
+    document.getElementById('score-text').textContent = `${score} / ${quizQuestions.length} 問正解`;
   }
 
   function backToConfig() {
     document.getElementById('result-area').classList.add('hidden');
     document.getElementById('config-area').classList.remove('hidden');
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/[&<>"']/g, match => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[match]));
   }
 </script>
 </body>
