@@ -228,6 +228,18 @@
       </div>
     </div>
 
+    <div class="setting-group">
+      <label>制限時間（1問あたり・時間切れ後も解答可）</label>
+      <select id="timer-select">
+        <option value="0">なし（タイマー非表示）</option>
+        <option value="15">15秒</option>
+        <option value="20">20秒</option>
+        <option value="30" selected>30秒</option>
+        <option value="45">45秒</option>
+        <option value="60">60秒</option>
+      </select>
+    </div>
+
     <button class="btn" onclick="startQuiz()">テスト開始</button>
     <button class="btn" style="background-color: #95a5a6;" onclick="resetData()">別のファイル・シートを選ぶ</button>
   </div>
@@ -277,6 +289,7 @@
 
   // タイマー管理用変数
   let timerInterval = null;
+  let timerLimitSeconds = 30;
   let remainingSeconds = 30;
 
   window.addEventListener('DOMContentLoaded', () => {
@@ -412,7 +425,8 @@
       startNum: minNum,
       endNum: maxNum,
       count: Math.min(10, questionList.length),
-      shuffle: true
+      shuffle: true,
+      timerSeconds: 30
     };
 
     try {
@@ -449,6 +463,7 @@
     document.getElementById('end-num').value = meta.endNum || maxNum;
     document.getElementById('question-count').value = meta.count || Math.min(10, questionList.length);
     document.getElementById('shuffle-check').checked = meta.shuffle !== undefined ? meta.shuffle : true;
+    document.getElementById('timer-select').value = meta.timerSeconds !== undefined ? String(meta.timerSeconds) : '30';
 
     updateAvailableCount();
 
@@ -496,6 +511,7 @@
     }
 
     const isShuffle = document.getElementById('shuffle-check').checked;
+    timerLimitSeconds = parseInt(document.getElementById('timer-select').value, 10) || 0;
 
     try {
       const currentMeta = JSON.parse(localStorage.getItem(STORAGE_KEY_META) || '{}');
@@ -504,6 +520,7 @@
       currentMeta.endNum = parseInt(document.getElementById('end-num').value, 10);
       currentMeta.count = count;
       currentMeta.shuffle = isShuffle;
+      currentMeta.timerSeconds = timerLimitSeconds;
       localStorage.setItem(STORAGE_KEY_META, JSON.stringify(currentMeta));
     } catch (e) {}
 
@@ -521,11 +538,18 @@
     showQuestion();
   }
 
-  // 30秒カウントダウン開始（0秒になっても何もしない）
+  // 指定秒数でカウントダウン開始（0秒になっても何もしない / 0指定時は非表示）
   function startTimer() {
     stopTimer();
-    remainingSeconds = 30;
     const timerEl = document.getElementById('timer-display');
+
+    if (timerLimitSeconds <= 0) {
+      timerEl.classList.add('hidden');
+      return;
+    }
+
+    timerEl.classList.remove('hidden');
+    remainingSeconds = timerLimitSeconds;
     timerEl.classList.remove('warning');
     timerEl.textContent = `⏱ ${remainingSeconds}秒`;
 
@@ -578,7 +602,7 @@
   }
 
   function checkAnswer(selectedBtn, selectedKey, questionObj) {
-    stopTimer(); // 解答した時点でタイマーを止める
+    stopTimer();
 
     const correctKey = questionObj.answer;
     const buttons = document.querySelectorAll('.choice-btn');
