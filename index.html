@@ -92,4 +92,185 @@
     <input type="file" id="excel-file" accept=".xlsx, .xls, .csv">
   </div>
 
-  <!-- 2. 出題範囲
+  <!-- 2. 出題範囲・出題数の設定画面 -->
+  <div class="card hidden" id="config-area">
+    <h1>出題設定</h1>
+    <p class="status" id="total-words-info">全 0 単語を読み込みました</p>
+
+    <div class="setting-group">
+      <label>出題範囲（単語番号）</label>
+      <div class="range-inputs">
+        <input type="number" id="start-num" min="1" value="1"> 番目 〜
+        <input type="number" id="end-num" min="1" value="10"> 番目
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <label>出題数（ランダム出題）</label>
+      <div class="range-inputs">
+        <input type="number" id="question-count" min="1" value="10"> 問
+      </div>
+    </div>
+
+    <button class="btn" onclick="startQuiz()">テスト開始</button>
+    <button class="btn" style="background-color: #95a5a6;" onclick="location.reload()">別のファイルを選ぶ</button>
+  </div>
+
+  <!-- 3. クイズ画面 -->
+  <div class="card hidden" id="quiz-area">
+    <div class="status" id="progress-text">問題 1 / 10</div>
+    <div class="word-display" id="question-word">apple</div>
+    <div id="choices-container"></div>
+    <button class="btn hidden" id="next-btn" onclick="nextQuestion()">次の問題へ</button>
+  </div>
+
+  <!-- 4. 結果画面 -->
+  <div class="card hidden" id="result-area">
+    <h1>テスト終了！</h1>
+    <p class="word-display" id="score-text">8 / 10 問正解</p>
+    <button class="btn" onclick="startQuiz()">同じ設定でもう一度</button>
+    <button class="btn" style="background-color: #2ecc71;" onclick="backToConfig()">範囲・出題数を変更する</button>
+    <button class="btn" style="background-color: #95a5a6;" onclick="location.reload()">別のファイルを選ぶ</button>
+  </div>
+
+<script>
+  let wordList = [];
+  let currentIndex = 0;
+  let score = 0;
+  let quizWords = [];
+
+  // ファイル選択時の処理
+  document.getElementById('excel-file').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+
+      // 1行目(ヘッダー)を除き、空行をフィルタリング
+      wordList = rows.slice(1)
+        .filter(row => row[0] && row[1])
+        .map(row => ({ en: String(row[0]).trim(), ja: String(row[1]).trim() }));
+
+      if (wordList.length < 4) {
+        alert("4択問題を作るため、最低4単語以上登録されたExcelファイルを選んでください。");
+        return;
+      }
+
+      // 設定画面の初期値をセット
+      document.getElementById('total-words-info').textContent = `全 ${wordList.length} 単語を読み込みました`;
+      document.getElementById('start-num').max = wordList.length;
+      document.getElementById('end-num').max = wordList.length;
+      document.getElementById('end-num').value = wordList.length;
+      document.getElementById('question-count').value = Math.min(10, wordList.length);
+
+      document.getElementById('setup-area').classList.add('hidden');
+      document.getElementById('config-area').classList.remove('hidden');
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  function startQuiz() {
+    const startNum = parseInt(document.getElementById('start-num').value, 10);
+    const endNum = parseInt(document.getElementById('end-num').value, 10);
+    const count = parseInt(document.getElementById('question-count').value, 10);
+
+    // 入力値のバリデーション
+    if (isNaN(startNum) || isNaN(endNum) || startNum < 1 || endNum > wordList.length || startNum > endNum) {
+      alert(`出題範囲は 1 〜 ${wordList.length} の間で正しく指定してください。`);
+      return;
+    }
+
+    // 指定範囲の単語を抽出（配列は0始まりなので startNum - 1）
+    const targetWords = wordList.slice(startNum - 1, endNum);
+
+    if (isNaN(count) || count < 1) {
+      alert("出題数は1以上を指定してください。");
+      return;
+    }
+
+    // 範囲内の単語数より多い出題数が指定された場合は、範囲内の全単語数に合わせる
+    const actualCount = Math.min(count, targetWords.length);
+
+    // 範囲内の単語をシャッフルして指定数だけ切り出す
+    quizWords = [...targetWords]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, actualCount);
+
+    currentIndex = 0;
+    score = 0;
+    document.getElementById('config-area').classList.add('hidden');
+    document.getElementById('result-area').classList.add('hidden');
+    document.getElementById('quiz-area').classList.remove('hidden');
+    showQuestion();
+  }
+
+  function showQuestion() {
+    const currentWord = quizWords[currentIndex];
+    document.getElementById('progress-text').textContent = `問題 ${currentIndex + 1} / ${quizWords.length}`;
+    document.getElementById('question-word').textContent = currentWord.en;
+    document.getElementById('next-btn').classList.add('hidden');
+
+    // 選択肢の作成（正解1つ + 全体の単語リストからランダム3つ）
+    let choices = [currentWord.ja];
+    let otherWords = wordList.filter(w => w.en !== currentWord.en);
+    otherWords.sort(() => Math.random() - 0.5);
+    for (let i = 0; i < 3; i++) {
+      choices.push(otherWords[i].ja);
+    }
+    choices.sort(() => Math.random() - 0.5);
+
+    const container = document.getElementById('choices-container');
+    container.innerHTML = '';
+    choices.forEach(choice => {
+      const btn = document.createElement('button');
+      btn.className = 'btn choice-btn';
+      btn.textContent = choice;
+      btn.onclick = () => checkAnswer(btn, choice, currentWord.ja);
+      container.appendChild(btn);
+    });
+  }
+
+  function checkAnswer(selectedBtn, selectedText, correctText) {
+    const buttons = document.querySelectorAll('.choice-btn');
+    buttons.forEach(btn => {
+      btn.disabled = true;
+      if (btn.textContent === correctText) {
+        btn.classList.add('correct');
+      }
+    });
+
+    if (selectedText === correctText) {
+      score++;
+    } else {
+      selectedBtn.classList.add('wrong');
+    }
+    document.getElementById('next-btn').classList.remove('hidden');
+  }
+
+  function nextQuestion() {
+    currentIndex++;
+    if (currentIndex < quizWords.length) {
+      showQuestion();
+    } else {
+      showResult();
+    }
+  }
+
+  function showResult() {
+    document.getElementById('quiz-area').classList.add('hidden');
+    document.getElementById('result-area').classList.remove('hidden');
+    document.getElementById('score-text').textContent = `${score} / ${quizWords.length} 問正解`;
+  }
+
+  function backToConfig() {
+    document.getElementById('result-area').classList.add('hidden');
+    document.getElementById('config-area').classList.remove('hidden');
+  }
+</script>
+</body>
+</html>
