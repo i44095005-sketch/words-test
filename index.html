@@ -114,7 +114,6 @@
     .choice-btn.wrong { background-color: #e74c3c; color: white; }
     .choice-btn.wrong .choice-label { color: white; }
 
-    /* 解説・日本語訳エリア */
     .explanation-box {
       margin-top: 20px;
       padding: 16px;
@@ -160,12 +159,19 @@
   <!-- 1. ファイル選択画面 -->
   <div class="card" id="setup-area">
     <h1>短文穴埋め 4択問題集</h1>
-    <p style="font-size: 0.9rem;">スマホ内のExcelファイル（.xlsx / .xls）を選択してください。</p>
+    <p style="font-size: 0.9rem;">スマホ内のExcelファイル（.xlsx / .xlsm / .xls）を選択してください。</p>
     <p style="font-size: 0.8rem; color: #666; background: #f8f9fa; padding: 10px; border-radius: 6px;">
-      <strong>列構成（1行目は見出し）：</strong><br>
+      <strong>列構成：</strong><br>
       A:番号 / B:分野 / C:問題文 / D〜G:選択肢A〜D / H:解答(A〜D) / I:解説 / J:日本語訳
     </p>
-    <input type="file" id="excel-file" accept=".xlsx, .xlsm, .xls, .csv">
+    <input type="file" id="excel-file">
+
+    <!-- シート選択エリア（複数シートがある場合や確認用） -->
+    <div id="sheet-select-area" class="setting-group hidden">
+      <label>読み込むシートを選択してください</label>
+      <select id="sheet-select"></select>
+      <button class="btn" onclick="loadSelectedSheet()">このシートを読み込む</button>
+    </div>
   </div>
 
   <!-- 2. 出題設定画面 -->
@@ -205,7 +211,7 @@
     </div>
 
     <button class="btn" onclick="startQuiz()">テスト開始</button>
-    <button class="btn" style="background-color: #95a5a6;" onclick="resetData()">別のファイルを選ぶ（データ更新）</button>
+    <button class="btn" style="background-color: #95a5a6;" onclick="resetData()">別のファイル・シートを選ぶ</button>
   </div>
 
   <!-- 3. クイズ画面 -->
@@ -219,7 +225,6 @@
 
     <div id="choices-container"></div>
 
-    <!-- 解答後に表示される解説・日本語訳 -->
     <div class="explanation-box hidden" id="explanation-area">
       <h3 id="result-banner">⭕ 正解！</h3>
       <div id="explanation-text"></div>
@@ -235,14 +240,15 @@
     <p class="score-display" id="score-text">8 / 10 問正解</p>
     <button class="btn" onclick="startQuiz()">同じ設定でもう一度</button>
     <button class="btn" style="background-color: #2ecc71;" onclick="backToConfig()">分野・範囲を変更する</button>
-    <button class="btn" style="background-color: #95a5a6;" onclick="resetData()">別のファイルを選ぶ</button>
+    <button class="btn" style="background-color: #95a5a6;" onclick="resetData()">別のファイル・シートを選ぶ</button>
   </div>
 
 <script>
-  // 以前のデータと衝突しないようキー名をバージョンアップ
-  const STORAGE_KEY_QUESTIONS = 'fill_blank_quiz_data_v1';
-  const STORAGE_KEY_META = 'fill_blank_quiz_meta_v1';
+  const STORAGE_KEY_QUESTIONS = 'fill_blank_quiz_data_v2';
+  const STORAGE_KEY_META = 'fill_blank_quiz_meta_v2';
 
+  let currentWorkbook = null;
+  let currentFileName = '';
   let questionList = [];
   let currentIndex = 0;
   let score = 0;
@@ -266,82 +272,150 @@
     }
   });
 
-  // Excelファイル読み込み
+  // Excelファイル選択時
   document.getElementById('excel-file').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
 
+    currentFileName = file.name;
     const reader = new FileReader();
     reader.onload = function(e) {
-      const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-
-      // 1行目(ヘッダー)を除き、問題文(C列)と選択肢(D〜G列)と解答(H列)がある行を抽出
-      const parsed = [];
-      rows.slice(1).forEach((row, idx) => {
-        if (!row[2] || !row[7]) return; // C列(問題文)とH列(解答)必須
-
-        const rawAns = String(row[7]).trim().toUpperCase();
-        if (!['A', 'B', 'C', 'D'].includes(rawAns)) return;
-
-        // A列が数値ならその番号、なければ1からの連番
-        const numVal = parseInt(row[0], 10);
-        const qNum = !isNaN(numVal) ? numVal : (parsed.length + 1);
-
-        parsed.push({
-          num: qNum,
-          category: row[1] ? String(row[1]).trim() : '未分類',
-          question: String(row[2]).trim(),
-          choices: {
-            A: row[3] !== undefined ? String(row[3]).trim() : '',
-            B: row[4] !== undefined ? String(row[4]).trim() : '',
-            C: row[5] !== undefined ? String(row[5]).trim() : '',
-            D: row[6] !== undefined ? String(row[6]).trim() : ''
-          },
-          answer: rawAns,
-          explanation: row[8] ? String(row[8]).trim() : '（解説なし）',
-          translation: row[9] ? String(row[9]).trim() : '（日本語訳なし）'
-        });
-      });
-
-      if (parsed.length === 0) {
-        alert("有効な問題データが見つかりませんでした。C列(問題文)、D〜G列(選択肢)、H列(A〜Dの解答)が正しく入力されているか確認してください。");
+      try {
+        const data = new Uint8Array(e.target.result);
+        currentWorkbook = XLSX.read(data, { type: 'array' });
+      } catch (err) {
+        alert("Excelファイルの解析に失敗しました。ファイル形式を確認してください。");
         return;
       }
 
-      questionList = parsed;
-
-      const minNum = Math.min(...questionList.map(q => q.num));
-      const maxNum = Math.max(...questionList.map(q => q.num));
-      const defaultMeta = {
-        fileName: file.name,
-        category: 'ALL',
-        startNum: minNum,
-        endNum: maxNum,
-        count: Math.min(10, questionList.length),
-        shuffle: true
-      };
-
-      try {
-        localStorage.setItem(STORAGE_KEY_QUESTIONS, JSON.stringify(questionList));
-        localStorage.setItem(STORAGE_KEY_META, JSON.stringify(defaultMeta));
-      } catch (err) {
-        alert("データ量が大きいためブラウザへの保存に失敗しました（今回のテストはそのまま実行できます）。");
+      const sheetNames = currentWorkbook.SheetNames;
+      if (!sheetNames || sheetNames.length === 0) {
+        alert("シートが見つかりません。");
+        return;
       }
 
-      setupConfigScreen(file.name, defaultMeta);
+      // プルダウンに全シート名をセットしつつ、有効データがある最初のシートを探す
+      const sheetSelect = document.getElementById('sheet-select');
+      sheetSelect.innerHTML = '';
+      let autoDetectedIndex = -1;
+
+      sheetNames.forEach((name, idx) => {
+        const parsed = parseSheet(currentWorkbook.Sheets[name]);
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = `${name}（有効問題: ${parsed.length}問）`;
+        sheetSelect.appendChild(opt);
+
+        if (autoDetectedIndex === -1 && parsed.length > 0) {
+          autoDetectedIndex = idx;
+        }
+      });
+
+      // シートが1つだけで問題が取れた場合はそのまま次へ進む
+      if (sheetNames.length === 1 && autoDetectedIndex === 0) {
+        sheetSelect.selectedIndex = 0;
+        loadSelectedSheet();
+        return;
+      }
+
+      // 複数シートある場合、または問題が見つからなかった場合はシート選択UIを表示
+      if (autoDetectedIndex !== -1) {
+        sheetSelect.selectedIndex = autoDetectedIndex;
+      }
+      document.getElementById('sheet-select-area').classList.remove('hidden');
     };
     reader.readAsArrayBuffer(file);
   });
 
-  // 設定画面の初期化
+  // 全角英数字を半角に変換するヘルパー
+  function toHalfWidth(str) {
+    return str.replace(/[Ａ-Ｚａ-ｚ０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
+  }
+
+  // シートから問題データを抽出する関数
+  function parseSheet(sheet) {
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    const parsed = [];
+
+    rows.forEach((row) => {
+      const sentence = String(row[2] || '').trim(); // C列: 問題文
+      let rawAns = toHalfWidth(String(row[7] || '')).trim().toUpperCase(); // H列: 解答
+      // "(A)" や "A." のような表記でもA〜Dを抽出
+      rawAns = rawAns.replace(/[^A-D]/g, '');
+
+      // 問題文があり、かつ解答がA/B/C/Dのいずれか1文字である行を対象にする（見出し行はここで自然に除外される）
+      if (!sentence || !['A', 'B', 'C', 'D'].includes(rawAns)) return;
+
+      const choiceA = String(row[3] || '').trim();
+      const choiceB = String(row[4] || '').trim();
+      // 選択肢が最低2つ以上入っているか確認
+      if (!choiceA && !choiceB) return;
+
+      const numVal = parseInt(toHalfWidth(String(row[0] || '')), 10);
+      const qNum = !isNaN(numVal) ? numVal : (parsed.length + 1);
+
+      parsed.push({
+        num: qNum,
+        category: String(row[1] || '').trim() || '未分類',
+        question: sentence,
+        choices: {
+          A: choiceA,
+          B: choiceB,
+          C: String(row[5] || '').trim(),
+          D: String(row[6] || '').trim()
+        },
+        answer: rawAns,
+        explanation: String(row[8] || '').trim() || '（解説なし）',
+        translation: String(row[9] || '').trim() || '（日本語訳なし）'
+      });
+    });
+
+    return parsed;
+  }
+
+  // 選択されたシートを読み込んで設定画面へ
+  function loadSelectedSheet() {
+    if (!currentWorkbook) return;
+    const sheetName = document.getElementById('sheet-select').value;
+    const sheet = currentWorkbook.Sheets[sheetName];
+    const parsed = parseSheet(sheet);
+
+    if (parsed.length === 0) {
+      // デバッグ用に先頭数行のC列とH列の中身を表示して原因を特定しやすくする
+      const previewRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }).slice(0, 5);
+      const debugText = previewRows.map((r, i) => `${i + 1}行目: C列="${String(r[2]).slice(0, 15)}..." / H列="${r[7]}"`).join('\n');
+      alert(`シート「${sheetName}」から有効な問題が見つかりませんでした。\n\n【読み取れた先頭データ】\n${debugText}\n\n※C列に問題文、D〜G列に選択肢、H列にA〜Dが入っているか確認してください。`);
+      return;
+    }
+
+    questionList = parsed;
+    const displayTitle = `${currentFileName} [${sheetName}]`;
+
+    const minNum = Math.min(...questionList.map(q => q.num));
+    const maxNum = Math.max(...questionList.map(q => q.num));
+    const defaultMeta = {
+      fileName: displayTitle,
+      category: 'ALL',
+      startNum: minNum,
+      endNum: maxNum,
+      count: Math.min(10, questionList.length),
+      shuffle: true
+    };
+
+    try {
+      localStorage.setItem(STORAGE_KEY_QUESTIONS, JSON.stringify(questionList));
+      localStorage.setItem(STORAGE_KEY_META, JSON.stringify(defaultMeta));
+    } catch (err) {
+      alert("データ量が大きいためブラウザへの保存に失敗しました（今回のテストはそのまま実行できます）。");
+    }
+
+    setupConfigScreen(displayTitle, defaultMeta);
+  }
+
   function setupConfigScreen(fileName, meta = {}) {
     document.getElementById('saved-filename').textContent = `📄 ${fileName}`;
     document.getElementById('total-words-info').textContent = `全 ${questionList.length} 問（保存済み）`;
 
-    // 分野プルダウンを動的生成
     const categories = [...new Set(questionList.map(q => q.category))];
     const catSelect = document.getElementById('category-select');
     catSelect.innerHTML = '<option value="ALL">すべての分野</option>';
@@ -369,7 +443,6 @@
     document.getElementById('config-area').classList.remove('hidden');
   }
 
-  // 条件に一致する問題数をリアルタイム表示
   function getFilteredQuestions() {
     const selectedCat = document.getElementById('category-select').value;
     const startNum = parseInt(document.getElementById('start-num').value, 10) || 0;
@@ -389,6 +462,7 @@
 
   function resetData() {
     document.getElementById('excel-file').value = '';
+    document.getElementById('sheet-select-area').classList.add('hidden');
     document.getElementById('config-area').classList.add('hidden');
     document.getElementById('result-area').classList.add('hidden');
     document.getElementById('setup-area').classList.remove('hidden');
@@ -409,7 +483,6 @@
 
     const isShuffle = document.getElementById('shuffle-check').checked;
 
-    // 設定をlocalStorageに保存
     try {
       const currentMeta = JSON.parse(localStorage.getItem(STORAGE_KEY_META) || '{}');
       currentMeta.category = document.getElementById('category-select').value;
@@ -440,7 +513,6 @@
     document.getElementById('question-category').textContent = q.category;
     document.getElementById('question-sentence').textContent = q.question;
 
-    // 解説エリアと次へボタンを隠す
     document.getElementById('explanation-area').classList.add('hidden');
     document.getElementById('next-btn').classList.add('hidden');
 
@@ -449,7 +521,7 @@
 
     ['A', 'B', 'C', 'D'].forEach(key => {
       const choiceText = q.choices[key];
-      if (!choiceText) return; // 空の選択肢はスキップ
+      if (!choiceText) return;
 
       const btn = document.createElement('button');
       btn.className = 'btn choice-btn';
@@ -482,7 +554,6 @@
       banner.style.color = '#c0392b';
     }
 
-    // 解説と日本語訳を表示
     document.getElementById('explanation-text').innerHTML = `<strong>【解説】</strong><br>${escapeHtml(questionObj.explanation).replace(/\n/g, '<br>')}`;
     document.getElementById('translation-text').innerHTML = `<strong>【日本語訳】</strong><br>${escapeHtml(questionObj.translation).replace(/\n/g, '<br>')}`;
     document.getElementById('explanation-area').classList.remove('hidden');
