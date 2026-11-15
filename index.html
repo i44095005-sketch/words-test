@@ -75,8 +75,8 @@
       margin-top: 2px;
     }
 
-    /* 習得度チェックボックス群 */
-    .mastery-header-row {
+    /* チェックボックス共通ヘッダー・ボタンスタイル */
+    .filter-header-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -84,7 +84,7 @@
       flex-wrap: wrap;
       gap: 6px;
     }
-    .mastery-header-row span {
+    .filter-header-row span {
       font-size: 0.9rem;
       font-weight: bold;
     }
@@ -104,12 +104,12 @@
     }
     .mini-btn:active { background: #e9ecef; }
 
-    .mastery-checkboxes {
+    .checkbox-pill-group {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
     }
-    .mastery-chk-label {
+    .chk-pill-label {
       display: inline-flex;
       align-items: center;
       gap: 5px;
@@ -121,11 +121,21 @@
       user-select: none;
       border: 1px solid rgba(0,0,0,0.08);
     }
-    .mastery-chk-label input[type="checkbox"] {
+    .chk-pill-label input[type="checkbox"] {
       width: 16px;
       height: 16px;
       margin: 0;
       cursor: pointer;
+    }
+    .cat-pill {
+      background: #fff;
+      color: #2c3e50;
+      border: 1px solid #d0d7de;
+    }
+    .cat-count {
+      font-size: 0.75rem;
+      font-weight: normal;
+      color: #666;
     }
 
     /* 習得度バッジ配色 */
@@ -378,27 +388,32 @@
 
     <!-- 習得度チェックボックス（複数選択） -->
     <div class="setting-group">
-      <div class="mastery-header-row">
+      <div class="filter-header-row">
         <span>習得度で絞り込む（複数選択可）</span>
         <div class="quick-filter-btns">
           <button type="button" class="mini-btn" onclick="setMasteryCheckboxes([0,1,2,3,4])">すべて選択</button>
           <button type="button" class="mini-btn" onclick="setMasteryCheckboxes([0,1,2,3])">完璧以外</button>
         </div>
       </div>
-      <div class="mastery-checkboxes" id="mastery-checkboxes">
-        <label class="mastery-chk-label lv-0"><input type="checkbox" value="0" checked onchange="updateAvailableCount()"> 未学習</label>
-        <label class="mastery-chk-label lv-1"><input type="checkbox" value="1" checked onchange="updateAvailableCount()"> 苦手</label>
-        <label class="mastery-chk-label lv-2"><input type="checkbox" value="2" checked onchange="updateAvailableCount()"> うろ覚え</label>
-        <label class="mastery-chk-label lv-3"><input type="checkbox" value="3" checked onchange="updateAvailableCount()"> ほぼ覚え</label>
-        <label class="mastery-chk-label lv-4"><input type="checkbox" value="4" checked onchange="updateAvailableCount()"> 完璧</label>
+      <div class="checkbox-pill-group" id="mastery-checkboxes">
+        <label class="chk-pill-label lv-0"><input type="checkbox" value="0" checked onchange="updateAvailableCount()"> 未学習</label>
+        <label class="chk-pill-label lv-1"><input type="checkbox" value="1" checked onchange="updateAvailableCount()"> 苦手</label>
+        <label class="chk-pill-label lv-2"><input type="checkbox" value="2" checked onchange="updateAvailableCount()"> うろ覚え</label>
+        <label class="chk-pill-label lv-3"><input type="checkbox" value="3" checked onchange="updateAvailableCount()"> ほぼ覚え</label>
+        <label class="chk-pill-label lv-4"><input type="checkbox" value="4" checked onchange="updateAvailableCount()"> 完璧</label>
       </div>
     </div>
 
+    <!-- 分野チェックボックス（複数選択） -->
     <div class="setting-group">
-      <label>分野で絞り込む</label>
-      <select id="category-select" onchange="updateAvailableCount()">
-        <option value="ALL">すべての分野</option>
-      </select>
+      <div class="filter-header-row">
+        <span>分野で絞り込む（複数選択可）</span>
+        <div class="quick-filter-btns">
+          <button type="button" class="mini-btn" onclick="setAllCategoryCheckboxes(true)">すべて選択</button>
+          <button type="button" class="mini-btn" onclick="setAllCategoryCheckboxes(false)">すべて解除</button>
+        </div>
+      </div>
+      <div class="checkbox-pill-group" id="category-checkboxes"></div>
     </div>
 
     <div class="setting-group">
@@ -862,6 +877,7 @@
     const displayTitle = `${currentFileName} [${sheetName}]`;
     const baseFileName = currentFileName.replace(/\.[^/.]+$/, '');
 
+    const allCategories = [...new Set(questionList.map(q => q.category))];
     const minNum = Math.min(...questionList.map(q => q.num));
     const maxNum = Math.max(...questionList.map(q => q.num));
     const defaultMeta = {
@@ -869,7 +885,7 @@
       baseFileName: baseFileName,
       sheetName: sheetName,
       selectedMasteries: [0, 1, 2, 3, 4],
-      category: 'ALL',
+      selectedCategories: allCategories,
       startNum: minNum,
       endNum: maxNum,
       count: Math.min(10, questionList.length),
@@ -889,7 +905,7 @@
     }
   }
 
-  // チェックボックスの選択状態を取得・設定するヘルパー
+  // 習得度チェックボックスの取得・一括設定
   function getSelectedMasteryLevels() {
     const checkboxes = document.querySelectorAll('#mastery-checkboxes input[type="checkbox"]');
     return Array.from(checkboxes)
@@ -901,6 +917,22 @@
     const checkboxes = document.querySelectorAll('#mastery-checkboxes input[type="checkbox"]');
     checkboxes.forEach(cb => {
       cb.checked = levels.includes(parseInt(cb.value, 10));
+    });
+    updateAvailableCount();
+  }
+
+  // 分野チェックボックスの取得・一括設定
+  function getSelectedCategories() {
+    const checkboxes = document.querySelectorAll('#category-checkboxes input[type="checkbox"]');
+    return Array.from(checkboxes)
+      .filter(cb => cb.checked)
+      .map(cb => cb.value);
+  }
+
+  function setAllCategoryCheckboxes(checked) {
+    const checkboxes = document.querySelectorAll('#category-checkboxes input[type="checkbox"]');
+    checkboxes.forEach(cb => {
+      cb.checked = checked;
     });
     updateAvailableCount();
   }
@@ -928,18 +960,39 @@
 
     renderMasterySummary();
 
-    const categories = [...new Set(questionList.map(q => q.category))];
-    const catSelect = document.getElementById('category-select');
-    catSelect.innerHTML = '<option value="ALL">すべての分野</option>';
-    categories.forEach(cat => {
-      const opt = document.createElement('option');
-      opt.value = cat;
-      opt.textContent = cat;
-      catSelect.appendChild(opt);
+    // 分野ごとに問題数を集計してチェックボックスを生成
+    const catCountMap = new Map();
+    questionList.forEach(q => {
+      catCountMap.set(q.category, (catCountMap.get(q.category) || 0) + 1);
     });
-    if (meta.category && (meta.category === 'ALL' || categories.includes(meta.category))) {
-      catSelect.value = meta.category;
-    }
+    const categories = Array.from(catCountMap.keys());
+
+    const catContainer = document.getElementById('category-checkboxes');
+    catContainer.innerHTML = '';
+    const savedCats = Array.isArray(meta.selectedCategories) ? meta.selectedCategories : categories;
+
+    categories.forEach(cat => {
+      const label = document.createElement('label');
+      label.className = 'chk-pill-label cat-pill';
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = cat;
+      cb.checked = savedCats.includes(cat);
+      cb.onchange = updateAvailableCount;
+
+      const textSpan = document.createElement('span');
+      textSpan.textContent = cat;
+
+      const countSpan = document.createElement('span');
+      countSpan.className = 'cat-count';
+      countSpan.textContent = `(${catCountMap.get(cat)})`;
+
+      label.appendChild(cb);
+      label.appendChild(textSpan);
+      label.appendChild(countSpan);
+      catContainer.appendChild(label);
+    });
 
     // 保存されていた習得度チェック状態を復元
     if (Array.isArray(meta.selectedMasteries)) {
@@ -966,14 +1019,14 @@
 
   function getFilteredQuestions() {
     const selectedLevels = getSelectedMasteryLevels();
-    const selectedCat = document.getElementById('category-select').value;
+    const selectedCats = getSelectedCategories();
     const startNum = parseInt(document.getElementById('start-num').value, 10) || 0;
     const endNum = parseInt(document.getElementById('end-num').value, 10) || 999999;
 
     return questionList.filter(q => {
       const lv = q.mastery || 0;
       const matchMastery = selectedLevels.includes(lv);
-      const matchCat = (selectedCat === 'ALL' || q.category === selectedCat);
+      const matchCat = selectedCats.includes(q.category);
       const matchNum = (q.num >= startNum && q.num <= endNum);
       return matchMastery && matchCat && matchNum;
     });
@@ -1001,6 +1054,12 @@
       return;
     }
 
+    const selectedCats = getSelectedCategories();
+    if (selectedCats.length === 0) {
+      alert("分野のチェックボックスを1つ以上選択してください。");
+      return;
+    }
+
     const filtered = getFilteredQuestions();
     if (filtered.length === 0) {
       alert("指定された条件に該当する問題がありません。");
@@ -1020,7 +1079,7 @@
     try {
       const currentMeta = JSON.parse(localStorage.getItem(STORAGE_KEY_META) || '{}');
       currentMeta.selectedMasteries = selectedLevels;
-      currentMeta.category = document.getElementById('category-select').value;
+      currentMeta.selectedCategories = selectedCats;
       currentMeta.startNum = parseInt(document.getElementById('start-num').value, 10);
       currentMeta.endNum = parseInt(document.getElementById('end-num').value, 10);
       currentMeta.count = count;
