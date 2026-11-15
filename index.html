@@ -33,7 +33,7 @@
       background: #f8f9fa;
       border-radius: 8px;
     }
-    .setting-group label {
+    .setting-group > label {
       display: block;
       font-size: 0.9rem;
       font-weight: bold;
@@ -73,6 +73,59 @@
       display: block;
       font-size: 1rem;
       margin-top: 2px;
+    }
+
+    /* 習得度チェックボックス群 */
+    .mastery-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .mastery-header-row span {
+      font-size: 0.9rem;
+      font-weight: bold;
+    }
+    .quick-filter-btns {
+      display: flex;
+      gap: 6px;
+    }
+    .mini-btn {
+      padding: 3px 8px;
+      font-size: 0.75rem;
+      font-weight: bold;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+      color: #555;
+      cursor: pointer;
+    }
+    .mini-btn:active { background: #e9ecef; }
+
+    .mastery-checkboxes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .mastery-chk-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: bold;
+      cursor: pointer;
+      user-select: none;
+      border: 1px solid rgba(0,0,0,0.08);
+    }
+    .mastery-chk-label input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      cursor: pointer;
     }
 
     /* 習得度バッジ配色 */
@@ -323,18 +376,22 @@
       <div class="mp3-status" id="mp3-loaded-status">音声データ確認中...</div>
     </div>
 
+    <!-- 習得度チェックボックス（複数選択） -->
     <div class="setting-group">
-      <label>習得度で絞り込む</label>
-      <select id="mastery-filter" onchange="updateAvailableCount()">
-        <option value="ALL">すべて</option>
-        <option value="NOT_PERFECT">「完璧」以外すべて（未学習〜ほぼ覚え）</option>
-        <option value="WEAK_AND_NEW">未学習 ＋ 苦手 のみ</option>
-        <option value="0">未学習 のみ</option>
-        <option value="1">苦手 のみ</option>
-        <option value="2">うろ覚え のみ</option>
-        <option value="3">ほぼ覚え のみ</option>
-        <option value="4">完璧 のみ</option>
-      </select>
+      <div class="mastery-header-row">
+        <span>習得度で絞り込む（複数選択可）</span>
+        <div class="quick-filter-btns">
+          <button type="button" class="mini-btn" onclick="setMasteryCheckboxes([0,1,2,3,4])">すべて選択</button>
+          <button type="button" class="mini-btn" onclick="setMasteryCheckboxes([0,1,2,3])">完璧以外</button>
+        </div>
+      </div>
+      <div class="mastery-checkboxes" id="mastery-checkboxes">
+        <label class="mastery-chk-label lv-0"><input type="checkbox" value="0" checked onchange="updateAvailableCount()"> 未学習</label>
+        <label class="mastery-chk-label lv-1"><input type="checkbox" value="1" checked onchange="updateAvailableCount()"> 苦手</label>
+        <label class="mastery-chk-label lv-2"><input type="checkbox" value="2" checked onchange="updateAvailableCount()"> うろ覚え</label>
+        <label class="mastery-chk-label lv-3"><input type="checkbox" value="3" checked onchange="updateAvailableCount()"> ほぼ覚え</label>
+        <label class="mastery-chk-label lv-4"><input type="checkbox" value="4" checked onchange="updateAvailableCount()"> 完璧</label>
+      </div>
     </div>
 
     <div class="setting-group">
@@ -459,7 +516,6 @@
   let currentCompletedSentence = '';
   let currentQuestionObj = null;
 
-  // 音声ファイルインデックス（キー -> ObjectURL、またはIndexedDBからオンデマンド取得）
   let mp3UrlMap = new Map();
   let idbInstance = null;
   let currentAudioPlayer = null;
@@ -473,7 +529,6 @@
     window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
   }
 
-  // IndexedDB 初期化（大容量のMP3データを永続保存）
   function openAudioDB() {
     return new Promise((resolve, reject) => {
       if (idbInstance) {
@@ -495,7 +550,6 @@
     });
   }
 
-  // IndexedDB に全MP3を保存する
   async function saveAudioBlobsToDB(entries) {
     try {
       const db = await openAudioDB();
@@ -515,7 +569,6 @@
     }
   }
 
-  // IndexedDB から保存済みMP3を復元してメモリマップに展開
   async function restoreAudioBlobsFromDB() {
     const statusEl = document.getElementById('mp3-loaded-status');
     try {
@@ -554,9 +607,7 @@
     }
   }
 
-  // ファイル名とBlobを検索用マップに登録（Deru1000_0001.mp3 などに対応）
   function registerAudioBlobToMap(rawPath, blob) {
-    // フォルダ階層が含まれる場合はベースファイル名だけ抽出（例: "audios/Deru1000_0001.mp3" -> "deru1000_0001.mp3"）
     const baseName = rawPath.split('/').pop().split('\\').pop().toLowerCase().trim();
     if (!baseName) return;
 
@@ -593,11 +644,9 @@
       }
     }
 
-    // 保存済みMP3があればバックグラウンドで自動復元
     await restoreAudioBlobsFromDB();
   });
 
-  // audios.zip または MP3複数ファイルの読み込み処理
   document.getElementById('mp3-files').addEventListener('change', async function(e) {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -615,7 +664,6 @@
       const lowerName = file.name.toLowerCase();
 
       if (lowerName.endsWith('.zip')) {
-        // ZIPファイルの解凍処理
         try {
           const zip = await JSZip.loadAsync(file);
           const zipEntries = Object.values(zip.files);
@@ -623,7 +671,6 @@
           for (const entry of zipEntries) {
             if (entry.dir) continue;
             const entryName = entry.name;
-            // Macの隠しファイル(__MACOSX等)を除外し、音声ファイルのみ抽出
             if (entryName.includes('__MACOSX') || entryName.split('/').pop().startsWith('.')) continue;
             if (!/\.(mp3|m4a|wav|ogg)$/i.test(entryName)) continue;
 
@@ -641,7 +688,6 @@
           return;
         }
       } else {
-        // 個別MP3ファイルの場合
         registerAudioBlobToMap(file.name, file);
         dbEntries.push([file.name, file]);
       }
@@ -653,16 +699,13 @@
       return;
     }
 
-    // IndexedDBに永続保存
     await saveAudioBlobsToDB(dbEntries);
     updateMp3StatusText(dbEntries.length, false);
   });
 
-  // 問題オブジェクトに対応するMP3のURLを探す（Deru1000_0001.mp3 形式に完全対応）
   function findMp3UrlForQuestion(q) {
     if (mp3UrlMap.size === 0) return null;
 
-    // 1. M列にファイル名が明示されている場合（最優先）
     if (q.audioFile) {
       const target = q.audioFile.toLowerCase().trim();
       if (mp3UrlMap.has(target)) return mp3UrlMap.get(target);
@@ -670,7 +713,6 @@
       if (mp3UrlMap.has(noExt)) return mp3UrlMap.get(noExt);
     }
 
-    // 2. A列の問題番号から候補を生成して照合
     const numStr = String(q.num);
     const pad2 = numStr.padStart(2, '0');
     const pad3 = numStr.padStart(3, '0');
@@ -826,7 +868,7 @@
       displayTitle: displayTitle,
       baseFileName: baseFileName,
       sheetName: sheetName,
-      masteryFilter: 'ALL',
+      selectedMasteries: [0, 1, 2, 3, 4],
       category: 'ALL',
       startNum: minNum,
       endNum: maxNum,
@@ -845,6 +887,22 @@
     if (mp3UrlMap.size > 0) {
       updateMp3StatusText(Math.floor(mp3UrlMap.size / 2), true);
     }
+  }
+
+  // チェックボックスの選択状態を取得・設定するヘルパー
+  function getSelectedMasteryLevels() {
+    const checkboxes = document.querySelectorAll('#mastery-checkboxes input[type="checkbox"]');
+    return Array.from(checkboxes)
+      .filter(cb => cb.checked)
+      .map(cb => parseInt(cb.value, 10));
+  }
+
+  function setMasteryCheckboxes(levels) {
+    const checkboxes = document.querySelectorAll('#mastery-checkboxes input[type="checkbox"]');
+    checkboxes.forEach(cb => {
+      cb.checked = levels.includes(parseInt(cb.value, 10));
+    });
+    updateAvailableCount();
   }
 
   function renderMasterySummary() {
@@ -883,8 +941,11 @@
       catSelect.value = meta.category;
     }
 
-    if (meta.masteryFilter) {
-      document.getElementById('mastery-filter').value = meta.masteryFilter;
+    // 保存されていた習得度チェック状態を復元
+    if (Array.isArray(meta.selectedMasteries)) {
+      setMasteryCheckboxes(meta.selectedMasteries);
+    } else {
+      setMasteryCheckboxes([0, 1, 2, 3, 4]);
     }
 
     const minNum = Math.min(...questionList.map(q => q.num));
@@ -904,22 +965,14 @@
   }
 
   function getFilteredQuestions() {
-    const masteryFilter = document.getElementById('mastery-filter').value;
+    const selectedLevels = getSelectedMasteryLevels();
     const selectedCat = document.getElementById('category-select').value;
     const startNum = parseInt(document.getElementById('start-num').value, 10) || 0;
     const endNum = parseInt(document.getElementById('end-num').value, 10) || 999999;
 
     return questionList.filter(q => {
       const lv = q.mastery || 0;
-      let matchMastery = true;
-      if (masteryFilter === 'NOT_PERFECT') {
-        matchMastery = lv < 4;
-      } else if (masteryFilter === 'WEAK_AND_NEW') {
-        matchMastery = (lv === 0 || lv === 1);
-      } else if (masteryFilter !== 'ALL') {
-        matchMastery = (lv === parseInt(masteryFilter, 10));
-      }
-
+      const matchMastery = selectedLevels.includes(lv);
       const matchCat = (selectedCat === 'ALL' || q.category === selectedCat);
       const matchNum = (q.num >= startNum && q.num <= endNum);
       return matchMastery && matchCat && matchNum;
@@ -942,6 +995,12 @@
   }
 
   function startQuiz() {
+    const selectedLevels = getSelectedMasteryLevels();
+    if (selectedLevels.length === 0) {
+      alert("習得度のチェックボックスを1つ以上選択してください。");
+      return;
+    }
+
     const filtered = getFilteredQuestions();
     if (filtered.length === 0) {
       alert("指定された条件に該当する問題がありません。");
@@ -960,7 +1019,7 @@
 
     try {
       const currentMeta = JSON.parse(localStorage.getItem(STORAGE_KEY_META) || '{}');
-      currentMeta.masteryFilter = document.getElementById('mastery-filter').value;
+      currentMeta.selectedMasteries = selectedLevels;
       currentMeta.category = document.getElementById('category-select').value;
       currentMeta.startNum = parseInt(document.getElementById('start-num').value, 10);
       currentMeta.endNum = parseInt(document.getElementById('end-num').value, 10);
